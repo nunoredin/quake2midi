@@ -1,0 +1,27 @@
+# Notices
+
+quake2midi is MIT licensed ([`LICENSE`](LICENSE)). It uses the following
+third-party sources and libraries.
+
+## Data
+
+- **Earthquake events** — EMSC / SeismicPortal FDSN event service,
+  <https://www.seismicportal.eu/fdsnws/event/1/query>. Events are fetched at
+  runtime and are not stored or redistributed by this project. SeismicPortal
+  data is provided by the European-Mediterranean Seismological Centre;
+  consult their terms at <https://www.seismicportal.eu/>.
+
+## Software
+
+- **mido** — MIDI I/O for Python, MIT licence,
+  <https://github.com/mido/mido>.
+- **python-rtmidi** — the RtMidi binding behind mido's port access, MIT
+  licence, <https://github.com/SpotlightKid/python-rtmidi>. RtMidi itself is
+  under a modified MIT licence.
+
+## MIDI ports
+
+This project sends to a local MIDI port only. Creating one is the user's
+responsibility: the IAC Driver on macOS (Apple, part of macOS), `snd-virmidi`
+on Linux (the kernel's ALSA virtual MIDI driver), or a third-party loopback
+such as loopMIDI on Windows (Tobias Erichsen, not bundled).

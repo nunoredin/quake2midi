@@ -1,0 +1,32 @@
+# Local interpreter
+.venv/
+venv/
+
+# Secrets (never commit)
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Runtime state (scripts/run.py writes status.json and run.pid)
+*.pid
+q2m/status.json
+
+# Session state
+/.github/handoff.md
+/CLAUDE.md
+
+# Local assistant state
+/.claude/
