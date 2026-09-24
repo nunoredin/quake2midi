@@ -33,14 +33,28 @@ Nothing is needed to try the mapping:
 
 This fetches the feed once, prints the notes it would send, and exits.
 
+## Tests
+
+```
+.venv/bin/python -m pytest
+```
+
+The tests stub the network and the MIDI port, so they run anywhere. Install
+the dev extras with `.venv/bin/python -m pip install pytest ruff`.
+
 ## The specs
 
 | | |
 |---|---|
-| Source | EMSC / SeismicPortal FDSN, polled every 8 s, 20-minute lookback |
+| Source | EMSC / SeismicPortal FDSN, polled every 8 s, one-hour window |
 | Mapping | Magnitude → velocity, length, note count; latitude → pitch; depth → octave; longitude → channel |
 | Output | MIDI notes to one local output port |
 | Runs on | Python 3.11+, `mido`, `python-rtmidi`. A standard-library status page on `127.0.0.1:5446` |
+
+The window is wider than the poll interval on purpose: the feed publishes an
+event up to ~21 minutes after it happens, and the FDSN `start` filter works
+on origin time. At start-up the existing events are marked as seen rather
+than played; pass `--play-existing` to hear the last hour instead.
 
 ## What is in the box
 

@@ -38,7 +38,18 @@ to. One script does the work, so run it and check the result.
      succeeds.
    - The script's last line starts with `Done.`
 
-4. List the MIDI destinations and tell the participant which to use.
+4. Run the test suite to confirm the install is sound. It needs `pytest`,
+   which setup does not install, so install it first.
+
+   ```
+   .venv/bin/python -m pip install pytest
+   .venv/bin/python -m pytest
+   ```
+
+   The tests never touch the network or a MIDI port. If any fail, show the
+   participant the failure and stop.
+
+5. List the MIDI destinations and tell the participant which to use.
 
    ```
    .venv/bin/python scripts/run.py --list-ports
@@ -48,7 +59,7 @@ to. One script does the work, so run it and check the result.
    `AGENTS.md` under "Before you start": enable the IAC Driver on macOS,
    `snd-virmidi` on Linux, or loopMIDI on Windows. Do not invent a port.
 
-5. Tell the participant how to run the bridge, which also serves a status
+6. Tell the participant how to run the bridge, which also serves a status
    page at http://127.0.0.1:5446/:
 
    - Windows: double-click `quake2midi.bat` in the repo root.

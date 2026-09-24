@@ -14,16 +14,26 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 
 EQ_QUERY_URL = "https://www.seismicportal.eu/fdsnws/event/1/query"
-EQ_LOOKBACK_S = 20 * 60
+# The feed publishes an event several minutes after it happens: measured lag
+# between origin time and ``lastupdate`` runs from about 5 to 21 minutes. The
+# FDSN ``start`` filter applies to origin time, so a window narrower than the
+# worst lag silently drops events that were published late. An hour covers it
+# with margin.
+EQ_LOOKBACK_S = 60 * 60
 EQ_FETCH_TIMEOUT_S = 8
 _UA = "quake2midi/1"
 
 
-def fetch_live_earthquakes(min_magnitude: float) -> list[dict]:
+def fetch_live_earthquakes(
+    min_magnitude: float,
+    lookback_s: int = EQ_LOOKBACK_S,
+) -> list[dict]:
     """Return worldwide events at or above ``min_magnitude``.
 
     Args:
         min_magnitude: FDSN ``minmagnitude`` cutoff.
+        lookback_s: How far back to ask, in seconds. Must cover the feed's
+            publication lag, not just the poll interval.
 
     Returns:
         Event dicts with ``id``, ``time``, ``mag``, ``lat``, ``lon``,
@@ -33,7 +43,7 @@ def fetch_live_earthquakes(min_magnitude: float) -> list[dict]:
         OSError: Network failure other than 204.
         ValueError: Response is not JSON GeoJSON.
     """
-    since = datetime.now(timezone.utc) - timedelta(seconds=EQ_LOOKBACK_S)
+    since = datetime.now(timezone.utc) - timedelta(seconds=lookback_s)
     params = {
         "start": since.strftime("%Y-%m-%dT%H:%M:%S"),
         "minmagnitude": min_magnitude,
@@ -62,7 +72,10 @@ def fetch_live_earthquakes(min_magnitude: float) -> list[dict]:
         if len(coords) < 2:
             continue
         lon, lat = coords[0], coords[1]
-        depth = coords[2] if len(coords) > 2 else None
+        depth = props.get("depth")
+        if depth is None and len(coords) > 2 and coords[2] is not None:
+            # GeoJSON elevation is negative downwards; depth is positive.
+            depth = abs(float(coords[2]))
         time_str, mag = props.get("time"), props.get("mag")
         eid = feat.get("id") or props.get("unid")
         if time_str is None or mag is None or eid is None:

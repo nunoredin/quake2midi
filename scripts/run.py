@@ -18,7 +18,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from q2m import core, midi, state  # noqa: E402
+from q2m import core, midi, quakes, state  # noqa: E402
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -54,6 +54,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         type=float,
         default=core.POLL_INTERVAL_S,
         help="seconds between polls (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--lookback",
+        type=float,
+        default=quakes.EQ_LOOKBACK_S,
+        help=(
+            "seconds of history each fetch asks for; must cover the feed's "
+            "publication lag (default: %(default)s)"
+        ),
+    )
+    parser.add_argument(
+        "--play-existing",
+        action="store_true",
+        help=(
+            "play the events already in the lookback window at start-up "
+            "instead of skipping them"
+        ),
     )
     parser.add_argument(
         "--once",
@@ -105,9 +122,14 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         st.set_port(args.port or "default")
 
+    player = core.Player(sink)
+    # Clear anything a previous run left sounding on this port.
+    player.panic()
+
     if args.once:
         played = core.run_once(
-            sink, st, args.min_magnitude, set(), dry_run=args.dry_run,
+            player, st, args.min_magnitude, set(), dry_run=args.dry_run,
+            lookback_s=int(args.lookback),
         )
         print(f" done: played {played} event(s)")
         sink.close()
@@ -124,7 +146,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f" status: http://{state.HOST}:{state.PORT}/")
 
     try:
-        core.run_forever(sink, st, args.min_magnitude, args.interval)
+        core.run_forever(
+            player, st, args.min_magnitude, args.interval,
+            lookback_s=int(args.lookback),
+            play_existing=args.play_existing,
+        )
     except KeyboardInterrupt:
         print("\n stopped")
     finally:

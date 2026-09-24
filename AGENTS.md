@@ -70,9 +70,10 @@ Copilot Chat. The handoff is `.github/handoff.md`, gitignored.
 - `q2m/` — the package
   - `quakes.py` — the live EMSC / SeismicPortal FDSN fetch
   - `mapping.py` — quake → MIDI notes (magnitude, depth, distance)
-  - `midi.py` — port selection and note output
-  - `core.py` — the polling loop and the dedupe of seen events
+  - `midi.py` — port selection, note output, and the all-notes-off panic
+  - `core.py` — the polling loop, the dedupe of seen events, the player
   - `state.py` — the JSON status file and the small HTTP status page
+- `tests/` — `pytest` tests for the package. No network, no MIDI port
 - `.env` — the OpenRouter API key. Gitignored.
 
 ## Rules
@@ -94,20 +95,28 @@ Copilot Chat. The handoff is `.github/handoff.md`, gitignored.
 
 ## Verify
 
-There is no test suite. The checks that exist:
+There is a small test suite, and a few manual checks.
 
+- `.venv/bin/python -m pytest` runs the tests. They never touch the network
+  or a MIDI port; the feed and the sink are stubbed.
 - `.venv/bin/python scripts/run.py --list-ports` lists MIDI destinations.
 - `.venv/bin/python scripts/run.py --once --dry-run` fetches the feed once,
   prints the notes it would send, and exits. No MIDI needed.
 - `.venv/bin/python scripts/run.py` runs the bridge; open
   http://127.0.0.1:5446/ to see the last events and the notes sent.
-- `.venv/bin/python -m pip install ruff`, then `python -m ruff check .`
-  lints the Python. Setup does not install `ruff`; install it when needed.
+- `.venv/bin/python -m ruff check .` lints the Python. Run
+  `.venv/bin/python -m pip install pytest ruff` first; setup installs only
+  the runtime dependencies.
 - `git status` shows nothing unexpected.
 
 ## Data
 
 The only source is the EMSC / SeismicPortal FDSN feed at
-`https://www.seismicportal.eu/fdsnws/event/1/query`, polled every 8 seconds
-with a 20-minute lookback. Nothing is stored; events are deduped by id for
-the life of the process. Details in [`NOTICE`](NOTICE).
+`https://www.seismicportal.eu/fdsnws/event/1/query`, polled every 8 seconds.
+The fetch asks for a one-hour window, because the feed publishes an event
+several minutes after it happens (measured lag: 5 to 21 minutes) and the FDSN
+`start` filter applies to origin time — a narrower window silently drops
+events that were published late. At start-up the loop marks whatever is
+already in that window as seen, so it does not play an hour of history at
+once; `--play-existing` overrides that. Nothing is stored; events are deduped
+by id for the life of the process. Details in [`NOTICE`](NOTICE).

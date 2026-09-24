@@ -16,8 +16,9 @@ Cover, in this order:
 4. **Risks** — what could break, and what you are unsure about.
 5. **Verify** — the commands that prove it works.
 
-This repo has no test suite. The checks that exist are:
+This repo has a small test suite, plus a few manual checks.
 
+- `.venv/bin/python -m pytest` — the tests. No network, no MIDI port.
 - `.venv/bin/python scripts/run.py --list-ports` — lists MIDI destinations.
 - `.venv/bin/python scripts/run.py --once --dry-run` — fetches the feed once
   and prints the notes, no MIDI needed.
