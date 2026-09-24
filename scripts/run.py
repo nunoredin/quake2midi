@@ -175,10 +175,12 @@ def main(argv: list[str] | None = None) -> int:
         try:
             server = state.StatusServer(st).start()
         except OSError as err:
-            print(f" [fail] status page: {err}")
-            sink.close()
-            return 1
-        print(f" status: http://{state.HOST}:{state.PORT}/")
+            # The status page is a convenience; the bridge is the point.
+            # A taken port must not stop the music.
+            print(f" [warn] status page unavailable: {err}")
+            print("        the bridge will run without it")
+        else:
+            print(f" status: http://{state.HOST}:{state.PORT}/")
 
     try:
         core.run_forever(

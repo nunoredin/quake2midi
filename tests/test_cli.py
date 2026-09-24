@@ -39,3 +39,41 @@ def test_default_min_magnitude_plays_everything():
     # The feed's own floor is about M0.8, so 0.0 means "no threshold of
     # ours" and plays every event the feed has.
     assert run.parse_args([]).min_magnitude == 0.0
+
+
+def test_status_page_failure_does_not_stop_the_bridge(monkeypatch, tmp_path):
+    # A taken status port used to make run.py exit before playing anything.
+    # The page is a convenience; the bridge must still run.
+    import q2m.state as state_mod
+
+    class Boom:
+        def __init__(self, *a, **k):
+            pass
+
+        def start(self):
+            raise OSError(48, "Address already in use")
+
+    monkeypatch.setattr(state_mod, "StatusServer", Boom)
+    monkeypatch.setattr(run.midi, "open_output", lambda name=None: _NullSink())
+    monkeypatch.setattr(run.midi, "list_output_ports", lambda: ["fake"])
+    monkeypatch.setattr(run.core, "run_forever", lambda *a, **k: None)
+    monkeypatch.setattr(run.state, "State", lambda root: _NullState())
+
+    rc = run.main(["--port", "fake"])
+    assert rc == 0
+
+
+class _NullSink:
+    def send(self, msg):
+        pass
+
+    def close(self):
+        pass
+
+
+class _NullState:
+    def set_port(self, name):
+        pass
+
+    def snapshot(self):
+        return {}
