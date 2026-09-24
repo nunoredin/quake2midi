@@ -17,7 +17,11 @@ from q2m import mapping, midi, quakes
 from q2m.state import State
 
 POLL_INTERVAL_S = 8.0
-DEFAULT_MIN_MAGNITUDE = 4.5
+# Play everything the feed has. The feed's own floor is about M0.8, so asking
+# for 0.0 and asking for 1.0 return the same events; 0.0 simply says "no
+# threshold of ours". The steady-state arrival rate is about 16 events an
+# hour worldwide.
+DEFAULT_MIN_MAGNITUDE = 0.0
 
 
 class Player:
@@ -141,6 +145,7 @@ def run_once(
     seen: set[str],
     dry_run: bool = False,
     lookback_s: int = quakes.EQ_LOOKBACK_S,
+    channel: int | None = mapping.DEFAULT_CHANNEL,
 ) -> int:
     """Poll the feed once and play any new events.
 
@@ -151,6 +156,8 @@ def run_once(
         seen: The set of event ids already played this run.
         dry_run: If True, print a line per event before playing it.
         lookback_s: How far back the fetch asks, in seconds.
+        channel: The MIDI channel to send on, or None to spread events
+            across eight channels by longitude and magnitude.
 
     Returns:
         How many events were played.
@@ -168,7 +175,7 @@ def run_once(
         if event["id"] in seen:
             continue
         seen.add(event["id"])
-        notes = mapping.map_event(event)
+        notes = mapping.map_event(event, channel)
         if dry_run:
             print(
                 f" M{event['mag']:<4} {event['region']} -> "
@@ -187,7 +194,8 @@ def run_forever(
     min_magnitude: float,
     interval_s: float = POLL_INTERVAL_S,
     lookback_s: int = quakes.EQ_LOOKBACK_S,
-    play_existing: bool = False,
+    skip_existing: bool = False,
+    channel: int | None = mapping.DEFAULT_CHANNEL,
 ) -> None:
     """Poll the feed on an interval until interrupted.
 
@@ -197,13 +205,17 @@ def run_forever(
         min_magnitude: The FDSN magnitude floor.
         interval_s: Seconds between polls.
         lookback_s: How far back each fetch asks, in seconds.
-        play_existing: If True, play the events already in the window at
-            start-up instead of marking them as seen.
+        skip_existing: If True, mark the events already in the window as
+            seen instead of playing them. The default plays them, so the
+            bridge makes sound from the first second rather than waiting
+            for the next event to be published.
+        channel: The MIDI channel to send on, or None to spread events
+            across eight channels by longitude and magnitude.
     """
-    if play_existing:
-        seen: set[str] = set()
-    else:
+    if skip_existing:
         seen = prime_seen(state, min_magnitude, lookback_s)
+    else:
+        seen: set[str] = set()
     print(
         f" watching M{min_magnitude}+ every {interval_s:.0f}s "
         "(Ctrl+C to stop)",
@@ -213,7 +225,7 @@ def run_forever(
         while True:
             run_once(
                 player, state, min_magnitude, seen,
-                lookback_s=lookback_s,
+                lookback_s=lookback_s, channel=channel,
             )
             time.sleep(interval_s)
     finally:

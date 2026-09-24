@@ -11,6 +11,17 @@ the planet plays.
 
 ## Run it
 
+The quickest way, once setup has run:
+
+- **macOS** — double-click [`quake2midi.command`](quake2midi.command).
+- **Windows** — double-click [`quake2midi.bat`](quake2midi.bat).
+
+Either one checks the venv, lists your MIDI destinations, and starts the
+bridge. Then open http://127.0.0.1:5446/ to watch the last events and the
+notes sent.
+
+From a terminal, the same thing in three steps:
+
 ```
 python3 scripts/setup.py                 # once: venv + dependencies
 .venv/bin/python scripts/run.py \
@@ -19,9 +30,17 @@ python3 scripts/setup.py                 # once: venv + dependencies
   --port "IAC Driver Bus 1"              # or just run it
 ```
 
-Then open http://127.0.0.1:5446/ to watch the last events and the notes sent.
-
 First time here? Follow [Setup](AGENTS.md#setup) in `AGENTS.md`.
+
+## Hearing it
+
+The bridge sends MIDI to a port; something has to listen on the other side.
+On macOS the usual destination is the IAC Driver. A DAW track, a synth, or a
+VCV Rack **MIDI to CV** module patched to an oscillator will do. Point it at
+the port named by `--list-ports`, on **channel 1**.
+
+If nothing sounds, check in this order: the listener is on the same port, it
+is on channel 1, and `--min-magnitude` is low enough that events are arriving.
 
 ## Without a MIDI port
 
@@ -46,15 +65,18 @@ the dev extras with `.venv/bin/python -m pip install pytest ruff`.
 
 | | |
 |---|---|
-| Source | EMSC / SeismicPortal FDSN, polled every 8 s, one-hour window |
-| Mapping | Magnitude → velocity, length, note count; latitude → pitch; depth → octave; longitude → channel |
-| Output | MIDI notes to one local output port |
+| Source | EMSC / SeismicPortal FDSN, polled every 8 s, six-hour window |
+| Mapping | Magnitude → velocity, length, note count; latitude → pitch; depth → octave |
+| Output | MIDI notes on channel 1 by default, to one local output port |
 | Runs on | Python 3.11+, `mido`, `python-rtmidi`. A standard-library status page on `127.0.0.1:5446` |
 
-The window is wider than the poll interval on purpose: the feed publishes an
-event up to ~21 minutes after it happens, and the FDSN `start` filter works
-on origin time. At start-up the existing events are marked as seen rather
-than played; pass `--play-existing` to hear the last hour instead.
+The window is much wider than the poll interval on purpose: the feed
+publishes an event well after it happens, and the FDSN `start` filter works
+on origin time, so a narrow window drops late events permanently. The
+magnitude floor is 0.0 — the feed's own floor is about M0.8, so this plays
+everything it has, roughly 16 events an hour worldwide. At start-up the
+events already in the window are played, so sound begins immediately; pass
+`--skip-existing` to wait for new ones instead.
 
 ## What is in the box
 

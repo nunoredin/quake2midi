@@ -63,9 +63,12 @@ to. One script does the work, so run it and check the result.
    page at http://127.0.0.1:5446/:
 
    - Windows: double-click `quake2midi.bat` in the repo root.
-   - macOS and Linux: run `.venv/bin/python scripts/run.py`.
+   - macOS and Linux: double-click `quake2midi.command`, or run
+     `.venv/bin/python scripts/run.py`.
 
-   Add `--dry-run` to print the notes instead of sending them.
+   Add `--dry-run` to print the notes instead of sending them, and
+   `--skip-existing` to wait for new events instead of playing the window
+   already on the feed at start-up.
 
 ## If it fails
 

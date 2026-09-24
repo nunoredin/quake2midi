@@ -1,2 +1,4 @@
 # The batch launcher needs Windows line endings to run.
 *.bat text eol=crlf
+# The shell launchers need Unix line endings, or bash refuses to run them.
+*.command text eol=lf

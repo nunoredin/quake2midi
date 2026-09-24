@@ -24,14 +24,21 @@ def event(**overrides: object) -> dict:
 
 def test_unit_clamps_below_and_above():
     assert mapping._unit(0.0) == 0.0
-    assert mapping._unit(2.0) == 0.0
+    assert mapping._unit(0.5) == 0.0
     assert mapping._unit(7.0) == 1.0
     assert mapping._unit(9.9) == 1.0
 
 
 def test_unit_is_monotonic():
-    values = [mapping._unit(m) for m in (2.0, 3.0, 4.0, 5.0, 6.0, 7.0)]
+    values = [mapping._unit(m) for m in (0.5, 1.0, 2.0, 4.0, 6.0, 7.0)]
     assert values == sorted(values)
+
+
+def test_small_events_are_not_all_clamped_to_the_minimum():
+    # The feed's floor is about M0.8. With the mapping floor at 2.0 a fifth
+    # of real events clamped to the minimum and came out identical.
+    small = [mapping.map_event(event(mag=m))[0] for m in (0.8, 1.2, 1.6, 2.0)]
+    assert len({n.velocity for n in small}) > 1
 
 
 def test_pitch_index_spans_the_scale():
@@ -60,20 +67,41 @@ def test_channel_stays_in_range():
             assert 0 <= channel < 16
 
 
+def test_map_event_defaults_to_one_channel():
+    # A synth patch usually listens on a single channel, so events must not
+    # be scattered across eight by default.
+    for lon in (-180.0, -9.1, 0.0, 95.7, 180.0):
+        notes = mapping.map_event(event(mag=4.5, lon=lon))
+        assert {n.channel for n in notes} == {mapping.DEFAULT_CHANNEL}
+
+
+def test_map_event_honours_an_explicit_channel():
+    notes = mapping.map_event(event(mag=5.0), channel=9)
+    assert {n.channel for n in notes} == {9}
+
+
+def test_map_event_spreads_channels_when_asked():
+    channels = {
+        mapping.map_event(event(mag=4.5, lon=lon), channel=None)[0].channel
+        for lon in (-180.0, -90.0, 0.0, 90.0, 180.0)
+    }
+    assert len(channels) > 1
+
+
 def test_map_event_returns_at_least_one_note():
-    notes = mapping.map_event(event(mag=2.0))
+    notes = mapping.map_event(event(mag=0.8))
     assert len(notes) == 1
 
 
 def test_map_event_grows_with_magnitude():
-    small = mapping.map_event(event(mag=2.0))
+    small = mapping.map_event(event(mag=0.8))
     large = mapping.map_event(event(mag=7.0))
     assert len(large) >= len(small)
     assert large[0].velocity >= small[0].velocity
 
 
 def test_map_event_notes_are_in_midi_range():
-    for mag in (2.0, 4.5, 7.0):
+    for mag in (0.8, 4.5, 7.0):
         for lat in (-90.0, 0.0, 90.0):
             for depth in (None, 5.0, 800.0):
                 notes = mapping.map_event(
@@ -100,9 +128,19 @@ def test_map_event_is_deterministic():
     assert first == second
 
 
-def test_map_event_requires_mag_lat_lon():
-    for missing in ("mag", "lat", "lon"):
+def test_map_event_requires_mag_and_lat():
+    for missing in ("mag", "lat"):
         data = event()
         del data[missing]
         with pytest.raises(KeyError):
             mapping.map_event(data)
+
+
+def test_map_event_needs_lon_only_when_spreading():
+    # With a fixed channel, longitude plays no part in the mapping.
+    data = event()
+    del data["lon"]
+    assert mapping.map_event(data)
+
+    with pytest.raises(KeyError):
+        mapping.map_event(data, channel=None)

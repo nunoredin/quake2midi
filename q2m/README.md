@@ -18,31 +18,38 @@ quakes.py  ->  mapping.py  ->  midi.py
 
 ## The lookback window
 
-`fetch_live_earthquakes()` asks for the last hour by default. That is much
-wider than the 8-second poll interval, and deliberately so: the feed
-publishes an event several minutes after it happens (measured lag between
-origin time and `lastupdate`: 5 to 21 minutes), while the FDSN `start` filter
-applies to **origin time**. A window sized to the poll interval would drop
-every event published late.
+`fetch_live_earthquakes()` asks for the last six hours by default. That is
+much wider than the 8-second poll interval, and deliberately so: the feed
+publishes an event well after it happens (median lag between origin time and
+`lastupdate`: ~13 min for M2.5+, ~32 min for smaller events), while the FDSN
+`start` filter applies to **origin time**. A window sized to the poll
+interval drops every late event permanently. Six hours catches the bulk: a
+one-hour window saw 4 events where six hours saw 68.
 
-The cost is that the first fetch of a run returns an hour of history. So
-`run_forever()` calls `prime_seen()` first: it fetches once and marks those
-ids as already played, and only events arriving afterwards sound. Pass
-`--play-existing` to skip the priming and hear the window instead. The
-window is settable with `--lookback SECONDS`.
+The cost is that the first fetch of a run returns hours of history. By
+default `run_forever()` plays it, so the bridge makes sound from the first
+second. Pass `--skip-existing` to call `prime_seen()` instead, which marks
+those ids as already played and waits for new ones. The window is settable
+with `--lookback SECONDS`.
 
 ## The mapping
 
 `map_event()` reads three fields and ignores the rest:
 
-- **Magnitude** (2 to 7, clamped) sets velocity (35-127), the held duration
-  (120-900 ms), and how many notes the gesture has (1-5).
+- **Magnitude** (0.5 to 7, clamped) sets velocity (35-127), the held
+  duration (120-900 ms), and how many notes the gesture has (1-5). The floor
+  sits just below the feed's own ~M0.8, so small events still get dynamics
+  instead of all clamping to the minimum.
 - **Latitude** picks an index into a two-octave A-minor pentatonic.
 - **Depth** shifts the octave: shallow up, deep down. A missing depth is 0.
-- **Longitude** and magnitude together choose one of eight channels.
 
 Notes in a gesture are staggered a few tens of milliseconds apart, so a big
 event is a small run rather than a chord.
+
+Everything goes to one MIDI channel (`DEFAULT_CHANNEL`), because a synth
+patch or a VCV Rack MIDI-to-CV module usually listens on a single channel.
+Pass `channel=None` to `map_event()` — `--channel 0` on the command line — to
+spread events across eight channels by longitude and magnitude instead.
 
 ## Adding a destination
 

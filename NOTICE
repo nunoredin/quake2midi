@@ -8,10 +8,10 @@ third-party sources and libraries.
 - **Earthquake events** — EMSC / SeismicPortal FDSN event service,
   <https://www.seismicportal.eu/fdsnws/event/1/query>. Events are fetched at
   runtime and are not stored or redistributed by this project. The fetch asks
-  for a one-hour window, because the service publishes an event up to about
-  21 minutes after it happens and its `start` filter applies to origin time.
-  SeismicPortal data is provided by the European-Mediterranean Seismological
-  Centre; consult their terms at <https://www.seismicportal.eu/>.
+  for a six-hour window, because the service publishes an event well after it
+  happens and its `start` filter applies to origin time. SeismicPortal data is
+  provided by the European-Mediterranean Seismological Centre; consult their
+  terms at <https://www.seismicportal.eu/>.
 
 ## Software
 

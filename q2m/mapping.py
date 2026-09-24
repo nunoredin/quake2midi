@@ -3,7 +3,7 @@
 The mapping turns the three things an event tells us into music:
 
 - **Magnitude** sets velocity and how long the gesture lasts, and how many
-  notes it has. A magnitude 2 is a single soft note; a magnitude 6 is a
+  notes it has. A magnitude 1 is a single soft note; a magnitude 6 is a
   loud five-note run.
 - **Latitude** picks the pitch, on a pentatonic scale so any two events
   sound consonant together.
@@ -21,7 +21,10 @@ from dataclasses import dataclass
 _SCALE = (0, 3, 5, 7, 10, 12, 15, 17, 19, 22)
 _ROOT_NOTE = 48  # C3
 
-_MAG_FLOOR = 2.0
+# The feed's own floor is about M0.8, so the mapping's floor sits just below
+# it. With the floor at 2.0, a fifth of the events clamped to the minimum and
+# came out as one barely-audible note.
+_MAG_FLOOR = 0.5
 _MAG_CEIL = 7.0
 _MIN_VELOCITY = 35
 _MAX_VELOCITY = 127
@@ -33,6 +36,10 @@ _DEPTH_SHALLOW_KM = 10.0
 _DEPTH_DEEP_KM = 600.0
 
 _CHANNELS = 8
+# A synth patch (a VCV Rack MIDI-to-CV, a DAW track) usually listens on one
+# channel. Spreading events across eight of them means most notes land
+# somewhere nothing is listening, so the default is a single channel.
+DEFAULT_CHANNEL = 0
 
 
 @dataclass(frozen=True)
@@ -87,11 +94,13 @@ def _channel(lon: float, mag: float) -> int:
     return (idx + int(_unit(mag) * 2)) % _CHANNELS
 
 
-def map_event(event: dict) -> list[Note]:
+def map_event(event: dict, channel: int | None = DEFAULT_CHANNEL) -> list[Note]:
     """Map one quake event to the notes it should play.
 
     Args:
         event: An event dict from :func:`q2m.quakes.fetch_live_earthquakes`.
+        channel: The MIDI channel to send on, 0-15. Pass None to spread
+            events across eight channels by longitude and magnitude.
 
     Returns:
         One to five notes, in the order they should be sent.
@@ -104,7 +113,8 @@ def map_event(event: dict) -> list[Note]:
         _MIN_DURATION_MS + unit * (_MAX_DURATION_MS - _MIN_DURATION_MS)
     ))
     count = 1 + int(round(unit * (_MAX_NOTES - 1)))
-    channel = _channel(float(event["lon"]), mag)
+    if channel is None:
+        channel = _channel(float(event["lon"]), mag)
     shift = _octave_shift(event.get("depth"))
     base = _ROOT_NOTE + _SCALE[_pitch_index(float(event["lat"]))] + shift
 

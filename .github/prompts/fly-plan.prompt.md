@@ -19,6 +19,7 @@ Cover, in this order:
 This repo has a small test suite, plus a few manual checks.
 
 - `.venv/bin/python -m pytest` — the tests. No network, no MIDI port.
+- `quake2midi.command` (or `.bat`) — runs the bridge the way a user would.
 - `.venv/bin/python scripts/run.py --list-ports` — lists MIDI destinations.
 - `.venv/bin/python scripts/run.py --once --dry-run` — fetches the feed once
   and prints the notes, no MIDI needed.

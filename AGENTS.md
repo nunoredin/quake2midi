@@ -27,8 +27,8 @@ piece lives in `q2m/`. There are no lessons in this repo.
 1. Open this folder in VS Code.
 2. In Copilot Chat, run `/fly-setup`. It creates `.venv`, installs
    `mido` and `python-rtmidi`, and checks for a MIDI port.
-3. Start the bridge with `.venv/bin/python scripts/run.py` (macOS / Linux)
-   or `quake2midi.bat` (Windows).
+3. Run the bridge by double-clicking `quake2midi.command` (macOS) or
+   `quake2midi.bat` (Windows), or with `.venv/bin/python scripts/run.py`.
 
 ## How to reply
 
@@ -65,6 +65,7 @@ Copilot Chat. The handoff is `.github/handoff.md`, gitignored.
 
 ## Layout
 
+- `quake2midi.command` / `quake2midi.bat` — the macOS and Windows launchers
 - `scripts/run.py` — the bridge: poll the feed, map, send MIDI
 - `scripts/setup.py` — creates `.venv` and installs dependencies
 - `q2m/` — the package
@@ -99,6 +100,7 @@ There is a small test suite, and a few manual checks.
 
 - `.venv/bin/python -m pytest` runs the tests. They never touch the network
   or a MIDI port; the feed and the sink are stubbed.
+- `quake2midi.command` (or `.bat`) runs the bridge the way a user would.
 - `.venv/bin/python scripts/run.py --list-ports` lists MIDI destinations.
 - `.venv/bin/python scripts/run.py --once --dry-run` fetches the feed once,
   prints the notes it would send, and exits. No MIDI needed.
@@ -113,10 +115,12 @@ There is a small test suite, and a few manual checks.
 
 The only source is the EMSC / SeismicPortal FDSN feed at
 `https://www.seismicportal.eu/fdsnws/event/1/query`, polled every 8 seconds.
-The fetch asks for a one-hour window, because the feed publishes an event
-several minutes after it happens (measured lag: 5 to 21 minutes) and the FDSN
-`start` filter applies to origin time — a narrower window silently drops
-events that were published late. At start-up the loop marks whatever is
-already in that window as seen, so it does not play an hour of history at
-once; `--play-existing` overrides that. Nothing is stored; events are deduped
-by id for the life of the process. Details in [`NOTICE`](NOTICE).
+The fetch asks for a six-hour window, because the feed publishes an event
+well after it happens (median lag 13 min for M2.5+, ~32 min for smaller
+events) and the FDSN `start` filter applies to origin time — a narrower
+window drops late events permanently. The magnitude floor is 0.0, which
+means "no threshold of ours": the feed's own floor is about M0.8. At
+start-up the loop plays whatever is already in the window, so sound begins
+immediately; `--skip-existing` marks it as seen instead. Nothing is stored;
+events are deduped by id for the life of the process. Details in
+[`NOTICE`](NOTICE).

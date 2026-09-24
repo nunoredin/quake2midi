@@ -65,11 +65,20 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
-        "--play-existing",
+        "--channel",
+        type=int,
+        default=1,
+        help=(
+            "MIDI channel to send on, 1-16 (default: %(default)s). "
+            "Use 0 to spread events across eight channels by longitude"
+        ),
+    )
+    parser.add_argument(
+        "--skip-existing",
         action="store_true",
         help=(
-            "play the events already in the lookback window at start-up "
-            "instead of skipping them"
+            "mark the events already in the lookback window as seen "
+            "instead of playing them at start-up"
         ),
     )
     parser.add_argument(
@@ -90,9 +99,35 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def midi_channel(value: int) -> int | None:
+    """Convert a 1-16 channel number to mido's 0-15, or None to spread.
+
+    Args:
+        value: The channel as given on the command line. 0 means "spread
+            events across eight channels by longitude".
+
+    Returns:
+        A mido channel, 0-15, or None.
+
+    Raises:
+        ValueError: The value is outside 0-16.
+    """
+    if value == 0:
+        return None
+    if 1 <= value <= 16:
+        return value - 1
+    raise ValueError(f"channel must be 0-16, got {value}")
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the bridge. Returns a process exit code."""
     args = parse_args(argv)
+
+    try:
+        channel = midi_channel(args.channel)
+    except ValueError as err:
+        print(f" [fail] {err}")
+        return 2
 
     if args.list_ports:
         names = midi.list_output_ports()
@@ -129,7 +164,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.once:
         played = core.run_once(
             player, st, args.min_magnitude, set(), dry_run=args.dry_run,
-            lookback_s=int(args.lookback),
+            lookback_s=int(args.lookback), channel=channel,
         )
         print(f" done: played {played} event(s)")
         sink.close()
@@ -149,7 +184,8 @@ def main(argv: list[str] | None = None) -> int:
         core.run_forever(
             player, st, args.min_magnitude, args.interval,
             lookback_s=int(args.lookback),
-            play_existing=args.play_existing,
+            skip_existing=args.skip_existing,
+            channel=channel,
         )
     except KeyboardInterrupt:
         print("\n stopped")

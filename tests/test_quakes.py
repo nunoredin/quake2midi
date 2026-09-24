@@ -117,10 +117,10 @@ def test_request_asks_for_the_right_parameters(monkeypatch):
 
 
 def test_lookback_defaults_to_a_window_wider_than_the_publication_lag():
-    # The feed publishes an event up to ~21 minutes after it happens, and
-    # ``start`` filters on origin time, so the window must be comfortably
-    # wider than the poll interval.
-    assert quakes.EQ_LOOKBACK_S >= 40 * 60
+    # The feed publishes an event well after it happens, and ``start``
+    # filters on origin time, so the window must be much wider than the
+    # poll interval or late events are dropped permanently.
+    assert quakes.EQ_LOOKBACK_S >= 3 * 60 * 60
 
 
 def test_lookback_is_honoured(monkeypatch):

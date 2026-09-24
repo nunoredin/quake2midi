@@ -14,12 +14,14 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 
 EQ_QUERY_URL = "https://www.seismicportal.eu/fdsnws/event/1/query"
-# The feed publishes an event several minutes after it happens: measured lag
-# between origin time and ``lastupdate`` runs from about 5 to 21 minutes. The
-# FDSN ``start`` filter applies to origin time, so a window narrower than the
-# worst lag silently drops events that were published late. An hour covers it
-# with margin.
-EQ_LOOKBACK_S = 60 * 60
+# The feed publishes an event well after it happens, and the FDSN ``start``
+# filter applies to origin time, not publication time. Measured lag between
+# origin time and ``lastupdate``: median ~13 min for M2.5+, but ~32 min for
+# smaller events, with a tail past 16 hours. A window narrower than the lag
+# drops those events permanently, because by the time they are published
+# their origin time is already outside it. Six hours catches the bulk of
+# them: a one-hour window saw 4 events where six hours saw 68.
+EQ_LOOKBACK_S = 6 * 60 * 60
 EQ_FETCH_TIMEOUT_S = 8
 _UA = "quake2midi/1"
 
