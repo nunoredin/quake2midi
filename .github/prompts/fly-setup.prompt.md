@@ -68,7 +68,9 @@ to. One script does the work, so run it and check the result.
 
    Add `--dry-run` to print the notes instead of sending them, and
    `--skip-existing` to wait for new events instead of playing the window
-   already on the feed at start-up.
+   already on the feed at start-up. Press SPACE in that terminal to play a
+   fake M5 quake, to check the patch without waiting for a real event;
+   nothing is printed to say so.
 
 ## If it fails
 

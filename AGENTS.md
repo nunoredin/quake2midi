@@ -70,9 +70,10 @@ Copilot Chat. The handoff is `.github/handoff.md`, gitignored.
 - `scripts/setup.py` — creates `.venv` and installs dependencies
 - `q2m/` — the package
   - `quakes.py` — the live EMSC / SeismicPortal FDSN fetch
-  - `mapping.py` — quake → MIDI notes (magnitude, depth, distance)
+  - `mapping.py` — quake → MIDI notes, in three magnitude regimes
   - `midi.py` — port selection, note output, and the all-notes-off panic
   - `core.py` — the polling loop, the dedupe of seen events, the player
+  - `keys.py` — single-keypress reading, for the spacebar fake event
   - `state.py` — the JSON status file and the small HTTP status page
 - `tests/` — `pytest` tests for the package. No network, no MIDI port
 - `.env` — the OpenRouter API key. Gitignored.
@@ -105,7 +106,9 @@ There is a small test suite, and a few manual checks.
 - `.venv/bin/python scripts/run.py --once --dry-run` fetches the feed once,
   prints the notes it would send, and exits. No MIDI needed.
 - `.venv/bin/python scripts/run.py` runs the bridge; open
-  http://127.0.0.1:5446/ to see the last events and the notes sent.
+  http://127.0.0.1:5446/ to see the last events and the notes sent. Press
+  SPACE in that terminal to play a fake M5 quake (nothing is printed to
+  tell you so).
 - `.venv/bin/python -m ruff check .` lints the Python. Run
   `.venv/bin/python -m pip install pytest ruff` first; setup installs only
   the runtime dependencies.

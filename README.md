@@ -42,6 +42,20 @@ the port named by `--list-ports`, on **channel 1**.
 If nothing sounds, check in this order: the listener is on the same port, it
 is on channel 1, and `--min-magnitude` is low enough that events are arriving.
 
+## Testing without an earthquake
+
+Press **SPACE** in the terminal where the bridge is running and it plays a
+fake M5 quake, so you can check a patch without waiting for the Earth. The
+status page shows it as `FAKE (spacebar)`. Pass `--no-keys` to turn the
+spacebar off. Nothing is printed to tell you the key is live.
+
+## Nothing hangs
+
+If no event plays for 30 seconds, the bridge forces the output back to
+silence (all sound off, all notes off), so a stuck note cannot sound
+forever. The longest gesture is under 4 seconds, so this never interrupts
+normal playing. `--silence-after N` changes the delay; `0` disables it.
+
 ## Without a MIDI port
 
 Nothing is needed to try the mapping:
@@ -66,7 +80,7 @@ the dev extras with `.venv/bin/python -m pip install pytest ruff`.
 | | |
 |---|---|
 | Source | EMSC / SeismicPortal FDSN, polled every 8 s, six-hour window |
-| Mapping | Magnitude → velocity, length, note count; latitude → pitch; depth → octave |
+| Mapping | Magnitude picks a regime: small = a tiny flash, medium = unstable, hard = long and strong. Latitude → pitch; depth → octave |
 | Output | MIDI notes on channel 1 by default, to one local output port |
 | Runs on | Python 3.11+, `mido`, `python-rtmidi`. A standard-library status page on `127.0.0.1:5446` |
 

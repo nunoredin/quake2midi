@@ -24,7 +24,7 @@ This repo has a small test suite, plus a few manual checks.
 - `.venv/bin/python scripts/run.py --once --dry-run` — fetches the feed once
   and prints the notes, no MIDI needed.
 - `.venv/bin/python scripts/run.py` — runs the bridge and serves the status
-  page at http://127.0.0.1:5446/.
+  page at http://127.0.0.1:5446/. SPACE plays a fake M5 quake.
 - `git status` — confirm nothing unexpected is staged.
 
 Keep the plan short enough to read in one sitting. Wait for approval before

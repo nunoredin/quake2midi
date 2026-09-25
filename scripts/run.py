@@ -82,6 +82,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--silence-after",
+        type=float,
+        default=core.SILENCE_AFTER_S,
+        help=(
+            "force the output back to silence after this many seconds "
+            "with no event; 0 disables (default: %(default)s)"
+        ),
+    )
+    parser.add_argument(
+        "--no-keys",
+        action="store_true",
+        help=(
+            "do not listen for the spacebar; by default SPACE plays a "
+            "fake M5 quake"
+        ),
+    )
+    parser.add_argument(
         "--once",
         action="store_true",
         help="poll once and exit; do not serve the status page",
@@ -188,6 +205,8 @@ def main(argv: list[str] | None = None) -> int:
             lookback_s=int(args.lookback),
             skip_existing=args.skip_existing,
             channel=channel,
+            watch_keys=not args.no_keys,
+            silence_after_s=args.silence_after,
         )
     except KeyboardInterrupt:
         print("\n stopped")

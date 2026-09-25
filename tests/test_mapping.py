@@ -41,6 +41,83 @@ def test_small_events_are_not_all_clamped_to_the_minimum():
     assert len({n.velocity for n in small}) > 1
 
 
+def test_small_events_are_a_single_note():
+    for mag in (0.8, 1.5, 2.9):
+        assert len(mapping.map_event(event(mag=mag))) == 1
+
+
+def test_small_events_are_brief():
+    # A tiny flash, not a gesture.
+    for mag in (0.8, 2.0, 2.9):
+        note = mapping.map_event(event(mag=mag))[0]
+        assert note.duration_ms <= mapping._SMALL_DURATION_MS[1]
+        assert note.velocity <= mapping._SMALL_VELOCITY[1]
+
+
+def test_medium_events_are_unstable():
+    # Several notes, and the pitch moves: not a rising run.
+    notes = mapping.map_event(event(mag=4.0, id="a"))
+    assert len(notes) >= mapping._MEDIUM_NOTES[0]
+    pitches = [n.note for n in notes]
+    assert len(set(pitches)) > 1
+    gaps = [b - a for a, b in zip(pitches, pitches[1:])]
+    assert any(g != gaps[0] for g in gaps)
+
+
+def test_medium_timing_is_uneven():
+    notes = mapping.map_event(event(mag=4.0, id="b"))
+    steps = [b.delay_ms - a.delay_ms for a, b in zip(notes, notes[1:])]
+    assert len(set(steps)) > 1
+
+
+def test_hard_events_are_long_and_strong():
+    for mag in (5.0, 6.0, 7.0):
+        notes = mapping.map_event(event(mag=mag, id="c"))
+        assert len(notes) >= mapping._HARD_NOTES[0]
+        assert all(n.velocity >= mapping._HARD_VELOCITY[0] for n in notes)
+        assert all(n.duration_ms >= mapping._HARD_DURATION_MS[0]
+                   for n in notes)
+
+
+def test_harder_is_always_louder_and_longer():
+    # The regimes must not overlap, or a harder quake could come out
+    # quieter or shorter than a weaker one.
+    small = mapping.map_event(event(mag=2.5, id="s"))[0]
+    medium = mapping.map_event(event(mag=4.0, id="m"))[0]
+    hard = mapping.map_event(event(mag=6.0, id="h"))[0]
+    assert small.velocity < medium.velocity < hard.velocity
+    assert small.duration_ms < medium.duration_ms < hard.duration_ms
+
+
+def test_hard_events_have_more_notes_than_small():
+    small = mapping.map_event(event(mag=1.0, id="s"))
+    hard = mapping.map_event(event(mag=6.0, id="h"))
+    assert len(hard) > len(small)
+
+
+def test_different_events_sound_different():
+    # Two medium events must not come out identical, or "unstable" fails.
+    shapes = {
+        tuple((n.note, n.velocity, n.delay_ms)
+              for n in mapping.map_event(event(mag=4.0, id=f"e{i}")))
+        for i in range(20)
+    }
+    assert len(shapes) > 1
+
+
+def test_gesture_is_stable_for_one_event_id():
+    # Randomness is seeded from the id, so a replay is reproducible.
+    a = mapping.map_event(event(mag=4.0, id="same"))
+    b = mapping.map_event(event(mag=4.0, id="same"))
+    assert a == b
+
+
+def test_seed_ignores_process_salting():
+    # hash() is salted per process; the seed must not be.
+    assert mapping._seed({"id": "abc"}) == mapping._seed({"id": "abc"})
+    assert mapping._seed({"id": "abc"}) != mapping._seed({"id": "xyz"})
+
+
 def test_pitch_index_spans_the_scale():
     assert mapping._pitch_index(-90.0) == 0
     assert mapping._pitch_index(90.0) == len(mapping._SCALE) - 1
@@ -96,8 +173,8 @@ def test_map_event_returns_at_least_one_note():
 def test_map_event_grows_with_magnitude():
     small = mapping.map_event(event(mag=0.8))
     large = mapping.map_event(event(mag=7.0))
-    assert len(large) >= len(small)
-    assert large[0].velocity >= small[0].velocity
+    assert len(large) > len(small)
+    assert large[0].velocity > small[0].velocity
 
 
 def test_map_event_notes_are_in_midi_range():

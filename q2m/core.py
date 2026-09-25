@@ -14,6 +14,7 @@ import time
 import mido
 
 from q2m import mapping, midi, quakes
+from q2m.keys import KeyWatcher
 from q2m.state import State
 
 POLL_INTERVAL_S = 8.0
@@ -22,6 +23,41 @@ POLL_INTERVAL_S = 8.0
 # threshold of ours". The steady-state arrival rate is about 16 events an
 # hour worldwide.
 DEFAULT_MIN_MAGNITUDE = 0.0
+
+# Force the output back to silence if no event has played for this long, so
+# nothing can stay sounding. The longest gesture is under 4 s, so 30 s is
+# comfortably clear of normal playing.
+SILENCE_AFTER_S = 30.0
+
+# The magnitude the spacebar fakes, for testing a patch without waiting for
+# the Earth to oblige.
+FAKE_MAGNITUDE = 3.2
+# A place and depth that map to a mid-range pitch, so the fake event sounds
+# like a plausible quake rather than an extreme one.
+_FAKE_LAT = 38.7
+_FAKE_LON = -9.1
+_FAKE_DEPTH_KM = 10.0
+
+
+def fake_event(magnitude: float = FAKE_MAGNITUDE) -> dict:
+    """Return a synthetic event, shaped like one from the feed.
+
+    Args:
+        magnitude: The magnitude to fake.
+
+    Returns:
+        An event dict with the same keys as
+        :func:`q2m.quakes.fetch_live_earthquakes`.
+    """
+    return {
+        "id": f"fake-{time.time_ns()}",
+        "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "mag": magnitude,
+        "lat": _FAKE_LAT,
+        "lon": _FAKE_LON,
+        "depth": _FAKE_DEPTH_KM,
+        "region": "FAKE (spacebar)",
+    }
 
 
 class Player:
@@ -196,6 +232,9 @@ def run_forever(
     lookback_s: int = quakes.EQ_LOOKBACK_S,
     skip_existing: bool = False,
     channel: int | None = mapping.DEFAULT_CHANNEL,
+    watch_keys: bool = False,
+    fake_magnitude: float = FAKE_MAGNITUDE,
+    silence_after_s: float = SILENCE_AFTER_S,
 ) -> None:
     """Poll the feed on an interval until interrupted.
 
@@ -211,22 +250,98 @@ def run_forever(
             for the next event to be published.
         channel: The MIDI channel to send on, or None to spread events
             across eight channels by longitude and magnitude.
+        watch_keys: If True, listen for the spacebar and play a fake event
+            when it is pressed.
+        fake_magnitude: The magnitude the spacebar fakes.
+        silence_after_s: Force the output back to silence after this many
+            seconds with no event. Use 0 to disable.
     """
     if skip_existing:
         seen = prime_seen(state, min_magnitude, lookback_s)
     else:
         seen: set[str] = set()
+
+    watcher = KeyWatcher() if watch_keys else None
+    if watcher is not None and not watcher.start():
+        print(" [warn] cannot read keys here; spacebar disabled")
+        watcher = None
+
     print(
         f" watching M{min_magnitude}+ every {interval_s:.0f}s "
         "(Ctrl+C to stop)",
         flush=True,
     )
+
+    # Nothing should stay sounding. If no event has played for a while, the
+    # output is forced back to silence, so a stuck note cannot hang forever.
+    last_sound = time.monotonic()
+    silenced = False
+
     try:
         while True:
-            run_once(
+            played = run_once(
                 player, state, min_magnitude, seen,
                 lookback_s=lookback_s, channel=channel,
             )
-            time.sleep(interval_s)
+            if played:
+                last_sound = time.monotonic()
+                silenced = False
+
+            # Wait out the interval. With a watcher we also wake on a
+            # keypress; either way the silence check runs every half second
+            # so the output cannot stay sounding.
+            deadline = time.monotonic() + interval_s
+            while True:
+                if not silenced and silence_after_s and \
+                        time.monotonic() - last_sound >= silence_after_s:
+                    player.panic()
+                    silenced = True
+                    print(
+                        f" silence: nothing for {silence_after_s:.0f}s",
+                        flush=True,
+                    )
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                if watcher is None:
+                    time.sleep(min(remaining, 0.5))
+                    continue
+                key = watcher.get(min(remaining, 0.5))
+                if key == " ":
+                    play_fake(player, state, fake_magnitude, channel)
+                    last_sound = time.monotonic()
+                    silenced = False
+                    break
     finally:
+        if watcher is not None:
+            watcher.stop()
         player.panic()
+
+
+def play_fake(
+    player: Player,
+    state: State,
+    magnitude: float = FAKE_MAGNITUDE,
+    channel: int | None = mapping.DEFAULT_CHANNEL,
+) -> int:
+    """Play one synthetic event, as if it had come from the feed.
+
+    Args:
+        player: The player to send notes through.
+        state: The state to record into.
+        magnitude: The magnitude to fake.
+        channel: The MIDI channel to send on, or None to spread.
+
+    Returns:
+        How many notes were played.
+    """
+    event = fake_event(magnitude)
+    notes = mapping.map_event(event, channel)
+    print(
+        f" FAKE  M{event['mag']:<4} {event['region']} -> "
+        f"{len(notes)} note(s)",
+        flush=True,
+    )
+    player.play(notes)
+    state.record(event, len(notes))
+    return len(notes)

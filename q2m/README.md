@@ -13,8 +13,27 @@ quakes.py  ->  mapping.py  ->  midi.py
 | `quakes.py` | `fetch_live_earthquakes()` — one poll of the FDSN feed |
 | `mapping.py` | `map_event()` — an event dict in, a list of `Note` out |
 | `midi.py` | `list_output_ports()`, `open_output()`, `all_notes_off()`, `DryRunSink` |
-| `core.py` | `Player`, `prime_seen()`, `run_once()` and `run_forever()` |
+| `core.py` | `Player`, `prime_seen()`, `run_once()`, `run_forever()`, `fake_event()` |
+| `keys.py` | `KeyWatcher` — single keypresses, for the spacebar fake event |
 | `state.py` | `State` and `StatusServer` — the status file and page |
+
+## The spacebar
+
+`run_forever()` can watch the terminal for the spacebar and play a fake M5
+quake on each press, so a patch can be tested without waiting for a real
+event. `KeyWatcher` puts the terminal into cbreak mode to read a key without
+Enter, and restores it on every exit path — including `SIGTERM` and `SIGHUP`,
+which would otherwise leave the shell with no echo. If stdin is not a
+terminal the watcher declines and the bridge runs without it. No hint is
+printed; the key is simply live.
+
+## Nothing hangs
+
+`run_forever()` watches the clock: if no event has played for
+`silence_after_s` (30 s by default), it calls `Player.panic()` to force the
+output back to silence. The longest gesture is under 4 s, so this is
+comfortably clear of normal playing. Pass 0 to disable. The check runs
+every half second, with or without a key watcher.
 
 ## The lookback window
 
@@ -34,17 +53,27 @@ with `--lookback SECONDS`.
 
 ## The mapping
 
-`map_event()` reads three fields and ignores the rest:
+`map_event()` reads the magnitude as one of three regimes, and the regimes
+are meant to be told apart by ear:
 
-- **Magnitude** (0.5 to 7, clamped) sets velocity (35-127), the held
-  duration (120-900 ms), and how many notes the gesture has (1-5). The floor
-  sits just below the feed's own ~M0.8, so small events still get dynamics
-  instead of all clamping to the minimum.
+| Regime | Magnitude | Sounds like |
+|---|---|---|
+| Small | below M3 | A tiny flash: one note, 40-110 ms, quiet |
+| Medium | M3 to M5 | Unstable: 3-7 notes that jump around, uneven timing and dynamics |
+| Hard | M5 and up | Long and strong: 6-12 loud notes, each held 0.5-2 s, overlapping |
+
+The velocity and duration ranges of the regimes **do not overlap**, so a
+harder quake is always louder and longer than a weaker one. About 23% of the
+feed is M0-2, 39% is M2-3, 28% is M3-4, 9% is M4-5, and 1% is M5+.
+
+Beyond magnitude:
+
 - **Latitude** picks an index into a two-octave A-minor pentatonic.
 - **Depth** shifts the octave: shallow up, deep down. A missing depth is 0.
 
-Notes in a gesture are staggered a few tens of milliseconds apart, so a big
-event is a small run rather than a chord.
+The medium and hard gestures are built from a random number generator seeded
+from the event id (crc32, not `hash()`, which is salted per process). A given
+event always sounds the same way, while different events differ.
 
 Everything goes to one MIDI channel (`DEFAULT_CHANNEL`), because a synth
 patch or a VCV Rack MIDI-to-CV module usually listens on a single channel.
