@@ -91,6 +91,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--replay-window",
+        type=float,
+        default=core.REPLAY_WINDOW_S,
+        help=(
+            "spread the start-up backlog across this many seconds, oldest "
+            "first; 0 plays it at once (default: %(default)s)"
+        ),
+    )
+    parser.add_argument(
         "--no-keys",
         action="store_true",
         help=(
@@ -207,6 +216,7 @@ def main(argv: list[str] | None = None) -> int:
             channel=channel,
             watch_keys=not args.no_keys,
             silence_after_s=args.silence_after,
+            replay_window_s=args.replay_window,
         )
     except KeyboardInterrupt:
         print("\n stopped")

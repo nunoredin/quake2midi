@@ -17,7 +17,7 @@ from q2m import mapping, midi, quakes
 from q2m.keys import KeyWatcher
 from q2m.state import State
 
-POLL_INTERVAL_S = 8.0
+POLL_INTERVAL_S = 5.0
 # Play everything the feed has. The feed's own floor is about M0.8, so asking
 # for 0.0 and asking for 1.0 return the same events; 0.0 simply says "no
 # threshold of ours". The steady-state arrival rate is about 16 events an
@@ -25,9 +25,14 @@ POLL_INTERVAL_S = 8.0
 DEFAULT_MIN_MAGNITUDE = 0.0
 
 # Force the output back to silence if no event has played for this long, so
-# nothing can stay sounding. The longest gesture is under 4 s, so 30 s is
+# nothing can stay sounding. The longest gesture is under 4 s, so 10 s is
 # comfortably clear of normal playing.
-SILENCE_AFTER_S = 30.0
+SILENCE_AFTER_S = 10.0
+
+# The first fetch of a run can return hours of history. Spreading that
+# backlog across this many seconds opens the piece gently instead of as a
+# burst. 0 keeps the old behaviour and plays the backlog at once.
+REPLAY_WINDOW_S = 120.0
 
 # The magnitude the spacebar fakes, for testing a patch without waiting for
 # the Earth to oblige.
@@ -140,6 +145,66 @@ class Player:
         ))
 
 
+class ReplayQueue:
+    """Spreads a start-up backlog across a fixed window.
+
+    The first fetch of a run can return hours of history. Playing it all at
+    once is a burst; the queue spaces the events evenly across ``window_s``
+    seconds instead, oldest first. Live events are played as they arrive
+    and never wait behind the backlog, because they do not go through the
+    queue at all.
+    """
+
+    def __init__(
+        self,
+        events: list[dict],
+        window_s: float,
+        start: float | None = None,
+    ) -> None:
+        """Create the queue.
+
+        Args:
+            events: The backlog, in any order.
+            window_s: How many seconds to spread the backlog across.
+            start: The instant the window opens, or None for now.
+        """
+        self._events = sorted(events, key=lambda e: e.get("time") or "")
+        self._window_s = window_s
+        self._start = time.monotonic() if start is None else start
+        self._next = 0
+
+    @property
+    def pending(self) -> int:
+        """Return how many events have not been played yet."""
+        return len(self._events) - self._next
+
+    def due(self, now: float | None = None) -> list[dict]:
+        """Return the events whose slot has arrived, oldest first.
+
+        The first event is due immediately, so sound begins at once; the
+        rest follow one every ``window_s / len(events)`` seconds.
+
+        Args:
+            now: The current instant, or None for now.
+
+        Returns:
+            The events to play, in order. Empty if none are due.
+        """
+        if not self._events:
+            return []
+        if now is None:
+            now = time.monotonic()
+        step = self._window_s / len(self._events)
+        out = []
+        while self._next < len(self._events):
+            at = self._start + self._next * step
+            if now < at:
+                break
+            out.append(self._events[self._next])
+            self._next += 1
+        return out
+
+
 def prime_seen(
     state: State,
     min_magnitude: float,
@@ -174,6 +239,71 @@ def prime_seen(
     return {event["id"] for event in events}
 
 
+def fetch_new(
+    state: State,
+    min_magnitude: float,
+    lookback_s: int,
+    seen: set[str],
+) -> list[dict]:
+    """Fetch once and return the events not yet seen, marking them seen.
+
+    Args:
+        state: The state to record the poll into.
+        min_magnitude: The FDSN magnitude floor.
+        lookback_s: How far back the fetch asks, in seconds.
+        seen: The set of event ids already played this run. New ids are
+            added to it.
+
+    Returns:
+        The new events, oldest first. Empty if the fetch fails.
+    """
+    try:
+        events = quakes.fetch_live_earthquakes(min_magnitude, lookback_s)
+    except (OSError, ValueError) as err:
+        state.error(f"{type(err).__name__}: {err}")
+        print(f" [warn] fetch failed: {err}", file=sys.stderr, flush=True)
+        return []
+    state.polled()
+    fresh = []
+    for event in events:
+        if event["id"] in seen:
+            continue
+        seen.add(event["id"])
+        fresh.append(event)
+    return fresh
+
+
+def play_event(
+    player: Player,
+    state: State,
+    event: dict,
+    channel: int | None = mapping.DEFAULT_CHANNEL,
+    dry_run: bool = False,
+) -> int:
+    """Map one event, play it, and record it.
+
+    Args:
+        player: The player to send notes through.
+        state: The state to record into.
+        event: The event dict to play.
+        channel: The MIDI channel to send on, or None to spread.
+        dry_run: If True, print a line before playing.
+
+    Returns:
+        How many notes were played.
+    """
+    notes = mapping.map_event(event, channel)
+    if dry_run:
+        print(
+            f" M{event['mag']:<4} {event['region']} -> "
+            f"{len(notes)} note(s)",
+            flush=True,
+        )
+    player.play(notes)
+    state.record(event, len(notes))
+    return len(notes)
+
+
 def run_once(
     player: Player,
     state: State,
@@ -198,28 +328,10 @@ def run_once(
     Returns:
         How many events were played.
     """
-    try:
-        events = quakes.fetch_live_earthquakes(min_magnitude, lookback_s)
-    except (OSError, ValueError) as err:
-        state.error(f"{type(err).__name__}: {err}")
-        print(f" [warn] fetch failed: {err}", file=sys.stderr, flush=True)
-        return 0
-
-    state.polled()
+    events = fetch_new(state, min_magnitude, lookback_s, seen)
     played = 0
     for event in events:
-        if event["id"] in seen:
-            continue
-        seen.add(event["id"])
-        notes = mapping.map_event(event, channel)
-        if dry_run:
-            print(
-                f" M{event['mag']:<4} {event['region']} -> "
-                f"{len(notes)} note(s)",
-                flush=True,
-            )
-        player.play(notes)
-        state.record(event, len(notes))
+        play_event(player, state, event, channel, dry_run)
         played += 1
     return played
 
@@ -235,6 +347,7 @@ def run_forever(
     watch_keys: bool = False,
     fake_magnitude: float = FAKE_MAGNITUDE,
     silence_after_s: float = SILENCE_AFTER_S,
+    replay_window_s: float = REPLAY_WINDOW_S,
 ) -> None:
     """Poll the feed on an interval until interrupted.
 
@@ -255,6 +368,10 @@ def run_forever(
         fake_magnitude: The magnitude the spacebar fakes.
         silence_after_s: Force the output back to silence after this many
             seconds with no event. Use 0 to disable.
+        replay_window_s: Spread the start-up backlog across this many
+            seconds, oldest first, instead of playing it as a burst. Use 0
+            to play the backlog at once. Ignored when ``skip_existing`` is
+            set, because then there is no backlog to play.
     """
     if skip_existing:
         seen = prime_seen(state, min_magnitude, lookback_s)
@@ -277,22 +394,50 @@ def run_forever(
     last_sound = time.monotonic()
     silenced = False
 
+    # The first fetch of a run can return hours of history. When a replay
+    # window is set, that backlog is spread across it instead of played as
+    # a burst; live events never go through the queue, so they jump ahead.
+    queue: ReplayQueue | None = None
+    first_poll = True
+
     try:
         while True:
-            played = run_once(
-                player, state, min_magnitude, seen,
-                lookback_s=lookback_s, channel=channel,
-            )
-            if played:
-                last_sound = time.monotonic()
-                silenced = False
+            if first_poll and not skip_existing and replay_window_s > 0:
+                backlog = fetch_new(
+                    state, min_magnitude, lookback_s, seen,
+                )
+                if backlog:
+                    queue = ReplayQueue(backlog, replay_window_s)
+                    print(
+                        f" replay: {len(backlog)} event(s) over "
+                        f"{replay_window_s:.0f}s",
+                        flush=True,
+                    )
+            else:
+                played = run_once(
+                    player, state, min_magnitude, seen,
+                    lookback_s=lookback_s, channel=channel,
+                )
+                if played:
+                    last_sound = time.monotonic()
+                    silenced = False
+            first_poll = False
 
             # Wait out the interval. With a watcher we also wake on a
             # keypress; either way the silence check runs every half second
             # so the output cannot stay sounding.
             deadline = time.monotonic() + interval_s
             while True:
-                if not silenced and silence_after_s and \
+                # Drain the backlog as its slots arrive. The watchdog is
+                # held off while it drains, then re-armed once it is empty.
+                if queue is not None:
+                    for event in queue.due():
+                        play_event(player, state, event, channel)
+                        last_sound = time.monotonic()
+                        silenced = False
+                    if not queue.pending:
+                        queue = None
+                if queue is None and not silenced and silence_after_s and \
                         time.monotonic() - last_sound >= silence_after_s:
                     player.panic()
                     silenced = True

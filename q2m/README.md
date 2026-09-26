@@ -13,7 +13,7 @@ quakes.py  ->  mapping.py  ->  midi.py
 | `quakes.py` | `fetch_live_earthquakes()` — one poll of the FDSN feed |
 | `mapping.py` | `map_event()` — an event dict in, a list of `Note` out |
 | `midi.py` | `list_output_ports()`, `open_output()`, `all_notes_off()`, `DryRunSink` |
-| `core.py` | `Player`, `prime_seen()`, `run_once()`, `run_forever()`, `fake_event()` |
+| `core.py` | `Player`, `ReplayQueue`, `prime_seen()`, `fetch_new()`, `play_event()`, `run_once()`, `run_forever()`, `fake_event()` |
 | `keys.py` | `KeyWatcher` — single keypresses, for the spacebar fake event |
 | `state.py` | `State` and `StatusServer` — the status file and page |
 
@@ -30,7 +30,7 @@ printed; the key is simply live.
 ## Nothing hangs
 
 `run_forever()` watches the clock: if no event has played for
-`silence_after_s` (30 s by default), it calls `Player.panic()` to force the
+`silence_after_s` (10 s by default), it calls `Player.panic()` to force the
 output back to silence. The longest gesture is under 4 s, so this is
 comfortably clear of normal playing. Pass 0 to disable. The check runs
 every half second, with or without a key watcher.
@@ -46,8 +46,12 @@ interval drops every late event permanently. Six hours catches the bulk: a
 one-hour window saw 4 events where six hours saw 68.
 
 The cost is that the first fetch of a run returns hours of history. By
-default `run_forever()` plays it, so the bridge makes sound from the first
-second. Pass `--skip-existing` to call `prime_seen()` instead, which marks
+default `run_forever()` plays it, spread across `replay_window_s` (120 s by
+default) so the piece opens gently instead of as a burst. The backlog is
+played oldest first, and live events jump ahead of it because they never
+go through the queue. The silence watchdog is held off while the backlog
+drains, then re-armed. Pass `--replay-window 0` to play the backlog at
+once, or `--skip-existing` to call `prime_seen()` instead, which marks
 those ids as already played and waits for new ones. The window is settable
 with `--lookback SECONDS`.
 
@@ -58,7 +62,7 @@ are meant to be told apart by ear:
 
 | Regime | Magnitude | Sounds like |
 |---|---|---|
-| Small | below M3 | A tiny flash: one note, 40-110 ms, quiet |
+| Small | below M3 | A tiny flash: 1-3 notes, 40-110 ms, quiet |
 | Medium | M3 to M5 | Unstable: 3-7 notes that jump around, uneven timing and dynamics |
 | Hard | M5 and up | Long and strong: 6-12 loud notes, each held 0.5-2 s, overlapping |
 
@@ -70,6 +74,11 @@ Beyond magnitude:
 
 - **Latitude** picks an index into a two-octave A-minor pentatonic.
 - **Depth** shifts the octave: shallow up, deep down. A missing depth is 0.
+
+Chaos is the point. The pentatonic scale is only the anchor: every note is
+displaced by a dissonant interval (semitones, tritones, minor seconds) and
+by a random octave jump, so gestures clash with each other and with
+themselves instead of settling into a consonant pattern.
 
 The medium and hard gestures are built from a random number generator seeded
 from the event id (crc32, not `hash()`, which is salted per process). A given

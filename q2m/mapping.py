@@ -3,7 +3,8 @@
 The mapping reads the magnitude as a regime, and the three regimes are
 meant to be told apart by ear:
 
-- **Small** (below M3) is a *tiny flash*: one note, very short, quiet.
+- **Small** (below M3) is a *tiny flash*: one to three notes, very short,
+  quiet.
 - **Medium** (M3 to M5) is *unstable*: several notes that jump around,
   with uneven timing and uneven dynamics, so it never settles into a
   pattern.
@@ -14,9 +15,13 @@ The velocity and duration ranges of the three regimes do not overlap, so a
 harder quake is always louder and longer than a weaker one, not just
 differently shaped.
 
-- **Latitude** picks the pitch, on a pentatonic scale so any two events
-  sound consonant together.
+- **Latitude** picks the pitch, on a pentatonic scale.
 - **Depth** drops the octave: a deep event sounds low, a shallow one high.
+
+Chaos is the point. The pentatonic scale is only the anchor: every note is
+displaced by a dissonant interval (semitones, tritones, minor seconds) and
+by a random octave jump, so gestures clash with each other and with
+themselves instead of settling into a consonant pattern.
 
 The medium and hard gestures are generated with a random number generator
 seeded from the event id, so a given event always sounds the same way while
@@ -45,10 +50,12 @@ _MAG_CEIL = 7.0
 _SMALL_BELOW = 3.0
 _HARD_AT = 5.0
 
-# Small: a tiny flash. One note, barely there.
+# Small: a tiny flash. One to three notes, barely there.
+_SMALL_NOTES = (1, 3)
 _SMALL_VELOCITY = (30, 70)
 _SMALL_DURATION_MS = (40, 110)
 _SMALL_JITTER = 6
+_SMALL_STEP_MS = (0, 60)
 
 # Medium: unstable. Several notes that jump around, unevenly timed and
 # unevenly loud, so no two gestures have the same shape.
@@ -57,8 +64,11 @@ _MEDIUM_VELOCITY = (75, 110)
 _MEDIUM_DURATION_MS = (150, 400)
 _MEDIUM_JITTER = 6
 _MEDIUM_STEP_MS = (0, 90)
-# Interval jumps, in semitones. Wide and irregular on purpose.
-_MEDIUM_LEAPS = (-12, -7, -5, -2, 0, 3, 5, 7, 12)
+# Interval jumps, in semitones. Wide and irregular on purpose, and they
+# include the dissonant offsets below so the pentatonic anchor is broken.
+_MEDIUM_LEAPS = (
+    -13, -12, -11, -7, -6, -5, -2, -1, 0, 1, 2, 3, 5, 6, 7, 11, 12, 13,
+)
 
 # Hard: long and strong. Many loud notes, each held, overlapping.
 _HARD_NOTES = (6, 12)
@@ -66,7 +76,15 @@ _HARD_VELOCITY = (112, 127)
 _HARD_DURATION_MS = (500, 2000)
 _HARD_JITTER = 3
 _HARD_STEP_MS = (70, 220)
-_HARD_LEAPS = (-12, -5, 0, 2, 4, 5, 7, 12)
+_HARD_LEAPS = (
+    -13, -12, -11, -6, -5, -2, -1, 0, 1, 2, 4, 5, 6, 7, 11, 12, 13,
+)
+
+# The pentatonic scale is the pitch anchor, but chaos means leaving it:
+# semitones, tritones, and minor seconds, so any two events can clash.
+_DISSONANT = (-13, -11, -6, -2, -1, 1, 2, 6, 11, 13)
+# A per-note octave displacement, so a gesture can leap a register or two.
+_OCTAVE_JUMPS = (-24, -12, 0, 0, 12, 24)
 
 _DEPTH_SHALLOW_KM = 10.0
 _DEPTH_DEEP_KM = 600.0
@@ -182,7 +200,7 @@ def _channel(lon: float, mag: float) -> int:
 def _small(
     mag: float, base: int, channel: int, rng: random.Random,
 ) -> list[Note]:
-    """Return a tiny flash: one short, quiet note.
+    """Return a tiny flash: one to three short, quiet notes.
 
     Args:
         mag: The event magnitude.
@@ -191,16 +209,25 @@ def _small(
         rng: Seeded random source.
 
     Returns:
-        A single note.
+        One to three notes, in the order they should be sent.
     """
     t = _within(mag, _MAG_FLOOR, _SMALL_BELOW)
-    return [Note(
-        note=int(_clamp(base, 0, 127)),
-        velocity=_scaled(_SMALL_VELOCITY, t, rng, _SMALL_JITTER),
-        channel=channel,
-        delay_ms=0,
-        duration_ms=_scaled(_SMALL_DURATION_MS, t, rng, _SMALL_JITTER),
-    )]
+    count = rng.randint(*_SMALL_NOTES)
+    notes = []
+    at = 0
+    for _ in range(count):
+        notes.append(Note(
+            note=int(_clamp(
+                base + rng.choice(_DISSONANT) + rng.choice(_OCTAVE_JUMPS),
+                0, 127,
+            )),
+            velocity=_scaled(_SMALL_VELOCITY, t, rng, _SMALL_JITTER),
+            channel=channel,
+            delay_ms=at,
+            duration_ms=_scaled(_SMALL_DURATION_MS, t, rng, _SMALL_JITTER),
+        ))
+        at += rng.randint(*_SMALL_STEP_MS)
+    return notes
 
 
 def _medium(
@@ -223,7 +250,11 @@ def _medium(
     at = 0
     for _ in range(count):
         notes.append(Note(
-            note=int(_clamp(base + rng.choice(_MEDIUM_LEAPS), 0, 127)),
+            note=int(_clamp(
+                base + rng.choice(_MEDIUM_LEAPS)
+                + rng.choice(_OCTAVE_JUMPS),
+                0, 127,
+            )),
             velocity=_scaled(_MEDIUM_VELOCITY, t, rng, _MEDIUM_JITTER),
             channel=channel,
             delay_ms=at,
@@ -253,7 +284,10 @@ def _hard(
     at = 0
     for _ in range(count):
         notes.append(Note(
-            note=int(_clamp(base + rng.choice(_HARD_LEAPS), 0, 127)),
+            note=int(_clamp(
+                base + rng.choice(_HARD_LEAPS) + rng.choice(_OCTAVE_JUMPS),
+                0, 127,
+            )),
             velocity=_scaled(_HARD_VELOCITY, t, rng, _HARD_JITTER),
             channel=channel,
             delay_ms=at,

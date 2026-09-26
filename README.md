@@ -51,10 +51,18 @@ spacebar off. Nothing is printed to tell you the key is live.
 
 ## Nothing hangs
 
-If no event plays for 30 seconds, the bridge forces the output back to
+If no event plays for 10 seconds, the bridge forces the output back to
 silence (all sound off, all notes off), so a stuck note cannot sound
 forever. The longest gesture is under 4 seconds, so this never interrupts
 normal playing. `--silence-after N` changes the delay; `0` disables it.
+
+## Opening gently
+
+The first fetch of a run returns up to six hours of history. Playing it
+all at once is a burst, so the bridge spreads it across 120 seconds,
+oldest first, and live events jump ahead of the backlog. The silence
+watchdog is held off while the backlog drains. `--replay-window N`
+changes the window; `0` plays the backlog at once.
 
 ## Without a MIDI port
 
@@ -79,8 +87,8 @@ the dev extras with `.venv/bin/python -m pip install pytest ruff`.
 
 | | |
 |---|---|
-| Source | EMSC / SeismicPortal FDSN, polled every 8 s, six-hour window |
-| Mapping | Magnitude picks a regime: small = a tiny flash, medium = unstable, hard = long and strong. Latitude → pitch; depth → octave |
+| Source | EMSC / SeismicPortal FDSN, polled every 5 s, six-hour window |
+| Mapping | Magnitude picks a regime: small = a tiny flash, medium = unstable, hard = long and strong. Latitude → pitch; depth → octave. Dissonant intervals and octave jumps keep it chaotic |
 | Output | MIDI notes on channel 1 by default, to one local output port |
 | Runs on | Python 3.11+, `mido`, `python-rtmidi`. A standard-library status page on `127.0.0.1:5446` |
 
@@ -89,8 +97,8 @@ publishes an event well after it happens, and the FDSN `start` filter works
 on origin time, so a narrow window drops late events permanently. The
 magnitude floor is 0.0 — the feed's own floor is about M0.8, so this plays
 everything it has, roughly 16 events an hour worldwide. At start-up the
-events already in the window are played, so sound begins immediately; pass
-`--skip-existing` to wait for new ones instead.
+events already in the window are played, spread across 120 seconds so the
+piece opens gently; pass `--skip-existing` to wait for new ones instead.
 
 ## What is in the box
 

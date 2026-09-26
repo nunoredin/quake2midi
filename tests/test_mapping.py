@@ -41,9 +41,10 @@ def test_small_events_are_not_all_clamped_to_the_minimum():
     assert len({n.velocity for n in small}) > 1
 
 
-def test_small_events_are_a_single_note():
+def test_small_events_are_one_to_three_notes():
     for mag in (0.8, 1.5, 2.9):
-        assert len(mapping.map_event(event(mag=mag))) == 1
+        count = len(mapping.map_event(event(mag=mag)))
+        assert mapping._SMALL_NOTES[0] <= count <= mapping._SMALL_NOTES[1]
 
 
 def test_small_events_are_brief():
@@ -167,7 +168,7 @@ def test_map_event_spreads_channels_when_asked():
 
 def test_map_event_returns_at_least_one_note():
     notes = mapping.map_event(event(mag=0.8))
-    assert len(notes) == 1
+    assert len(notes) >= 1
 
 
 def test_map_event_grows_with_magnitude():
@@ -221,3 +222,37 @@ def test_map_event_needs_lon_only_when_spreading():
 
     with pytest.raises(KeyError):
         mapping.map_event(data, channel=None)
+
+
+def test_gestures_leave_the_pentatonic_scale():
+    # Chaos means the pentatonic anchor is broken: across many events, some
+    # note must land on an interval the scale does not contain.
+    scale = set(mapping._SCALE)
+    offsets = set()
+    for i in range(40):
+        notes = mapping.map_event(event(mag=4.0, id=f"c{i}"))
+        base = mapping._ROOT_NOTE + mapping._SCALE[
+            mapping._pitch_index(0.0)
+        ]
+        offsets.update(n.note - base for n in notes)
+    assert offsets - scale
+
+
+def test_gestures_span_more_than_one_octave():
+    # Octave jumps mean a single gesture can cover a wide register.
+    spans = []
+    for i in range(40):
+        notes = mapping.map_event(event(mag=6.0, id=f"o{i}"))
+        spans.append(max(n.note for n in notes) - min(n.note for n in notes))
+    assert max(spans) > 12
+
+
+def test_small_gestures_can_also_clash():
+    # The small regime is chaotic too, not a single clean note.
+    shapes = {
+        tuple((n.note, n.delay_ms)
+              for n in mapping.map_event(event(mag=1.0, id=f"s{i}")))
+        for i in range(40)
+    }
+    assert len(shapes) > 1
+    assert any(len(shape) > 1 for shape in shapes)

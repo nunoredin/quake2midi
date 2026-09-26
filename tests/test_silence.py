@@ -153,6 +153,9 @@ def drive(
                 core.Player(sink), a_state(), 0.0,
                 interval_s=8.0, lookback_s=3600,
                 silence_after_s=silence_after,
+                # These tests are about the watchdog, not the start-up
+                # replay, so play the first poll's events at once.
+                replay_window_s=0.0,
             )
     return sink, buffer.getvalue()
 
@@ -163,8 +166,8 @@ def test_silence_constant_is_clear_of_the_longest_gesture():
     assert core.SILENCE_AFTER_S >= 10.0
 
 
-def test_silence_after_defaults_to_30s():
-    assert core.SILENCE_AFTER_S == 30.0
+def test_silence_after_defaults_to_10s():
+    assert core.SILENCE_AFTER_S == 10.0
 
 
 def test_watchdog_silences_the_port_after_a_quiet_spell(monkeypatch):

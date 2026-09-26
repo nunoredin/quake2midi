@@ -117,13 +117,13 @@ There is a small test suite, and a few manual checks.
 ## Data
 
 The only source is the EMSC / SeismicPortal FDSN feed at
-`https://www.seismicportal.eu/fdsnws/event/1/query`, polled every 8 seconds.
+`https://www.seismicportal.eu/fdsnws/event/1/query`, polled every 5 seconds.
 The fetch asks for a six-hour window, because the feed publishes an event
 well after it happens (median lag 13 min for M2.5+, ~32 min for smaller
 events) and the FDSN `start` filter applies to origin time — a narrower
 window drops late events permanently. The magnitude floor is 0.0, which
 means "no threshold of ours": the feed's own floor is about M0.8. At
-start-up the loop plays whatever is already in the window, so sound begins
-immediately; `--skip-existing` marks it as seen instead. Nothing is stored;
-events are deduped by id for the life of the process. Details in
-[`NOTICE`](NOTICE).
+start-up the loop plays whatever is already in the window, spread across
+120 seconds so the piece opens gently; `--skip-existing` marks it as seen
+instead. Nothing is stored; events are deduped by id for the life of the
+process. Details in [`NOTICE`](NOTICE).

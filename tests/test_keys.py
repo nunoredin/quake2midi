@@ -40,8 +40,8 @@ def test_fake_event_has_the_feed_shape():
         assert key in event, key
 
 
-def test_fake_event_defaults_to_m5():
-    assert core.fake_event()["mag"] == 5.0
+def test_fake_event_defaults_to_m3_2():
+    assert core.fake_event()["mag"] == 3.2
 
 
 def test_fake_event_magnitude_is_settable():
